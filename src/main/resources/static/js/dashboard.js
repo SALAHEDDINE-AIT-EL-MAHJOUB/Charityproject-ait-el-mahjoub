@@ -132,3 +132,17 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error("Modal elements not found"); // Debug line
     }
 });
+
+<div th:replace="~{user/profile/profileModal :: profileModal}"></div>
+
+<div class="profile-details">
+  <div class="detail-item">
+    <span class="label">Nom:</span>
+    <span class="value" th:text="${user.nom}">Nom de l'Utilisateur</span>
+  </div>
+  <div class="detail-item">
+    <span class="label">Email:</span>
+    <span class="value" th:text="${user.email}">email@example.com</span>
+  </div>
+  <!-- etc. -->
+</div>

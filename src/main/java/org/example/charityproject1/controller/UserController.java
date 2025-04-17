@@ -43,14 +43,16 @@ public class UserController {
     }
 
     @PostMapping("/update-profile")
-    public String updateProfile(@RequestParam("nom") String nom,
-                                @RequestParam("email") String email,
-                                @RequestParam("telephone") String telephone,
-                                @RequestParam("localisation") String localisation,
-                                @RequestParam(value = "photoFile", required = false) MultipartFile photoFile,
-                                HttpSession session,
-                                RedirectAttributes redirectAttributes) {
+    public String updateProfile(
+            @RequestParam("nom") String nom,
+            @RequestParam("email") String email,
+            @RequestParam("telephone") String telephone,
+            @RequestParam("localisation") String localisation,
+            @RequestParam(value = "profileImage", required = false) MultipartFile profileImage,
+            HttpSession session,
+            RedirectAttributes redirectAttributes) {
 
+        // Récupérer l'utilisateur connecté
         String userEmail = (String) session.getAttribute("user_email");
         if (userEmail == null) {
             return "redirect:/auth/login";
@@ -62,88 +64,82 @@ public class UserController {
             return "redirect:/auth/login";
         }
 
-        // Validate form data
+        // Validation des données
         if (nom == null || nom.trim().isEmpty()) {
             redirectAttributes.addFlashAttribute("profileError", "name-invalid");
-            redirectAttributes.addFlashAttribute("profileErrorMessage", "Le nom est obligatoire.");
-            return "redirect:/user/dashboard?profileError=true";
+            return "redirect:/user/dashboard";
         }
 
-        // Validate email
-        if (email == null || email.trim().isEmpty() || !email.matches("^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$")) {
+        if (email == null || !email.matches("^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$")) {
             redirectAttributes.addFlashAttribute("profileError", "email-invalid");
-            redirectAttributes.addFlashAttribute("profileErrorMessage", "Veuillez saisir un email valide.");
-            return "redirect:/user/dashboard?profileError=true";
+            return "redirect:/user/dashboard";
         }
 
-        // Validate phone
-        if (telephone == null || !telephone.matches("^[0-9]{10}$")) {
+        if (telephone != null && !telephone.isEmpty() && !telephone.matches("^[0-9]{10}$")) {
             redirectAttributes.addFlashAttribute("profileError", "phone-invalid");
-            redirectAttributes.addFlashAttribute("profileErrorMessage", "Le téléphone doit contenir 10 chiffres.");
-            return "redirect:/user/dashboard?profileError=true";
+            return "redirect:/user/dashboard";
         }
 
         if (localisation == null || localisation.trim().isEmpty()) {
             redirectAttributes.addFlashAttribute("profileError", "localisation-invalid");
-            redirectAttributes.addFlashAttribute("profileErrorMessage", "La localisation est obligatoire.");
-            return "redirect:/user/dashboard?profileError=true";
+            return "redirect:/user/dashboard";
         }
 
-        Utilisateurs utilisateur = userOptional.get();
+        Utilisateurs user = userOptional.get();
 
-        // Check if email changed and is unique
+        // Vérifier si l'email a changé
         if (!email.equals(userEmail)) {
+            // Vérifier si l'email est déjà utilisé par un autre utilisateur
             Optional<Utilisateurs> existingUser = utilisateursRepository.findByEmail(email);
-            if (existingUser.isPresent() && !existingUser.get().getUserId().equals(utilisateur.getUserId())) {
+            if (existingUser.isPresent() && !existingUser.get().getUserId().equals(user.getUserId())) {
                 redirectAttributes.addFlashAttribute("profileError", "email-exists");
-                redirectAttributes.addFlashAttribute("profileErrorMessage", "Cet email est déjà utilisé.");
-                return "redirect:/user/dashboard?profileError=true";
+                return "redirect:/user/dashboard";
             }
 
-            // Update email and logout
-            utilisateur.setEmail(email);
-            utilisateursRepository.save(utilisateur);
-
+            // Si l'email est modifié, l'utilisateur devra se reconnecter
+            user.setEmail(email);
+            utilisateursRepository.save(user);
             session.invalidate();
-            redirectAttributes.addFlashAttribute("message", "Votre email a été modifié. Veuillez vous reconnecter.");
+            redirectAttributes.addFlashAttribute("successMessage", "Votre email a été modifié. Veuillez vous reconnecter.");
             return "redirect:/auth/login";
         }
 
-        // Update user data
-        utilisateur.setNom(nom);
-        utilisateur.setTelephone(telephone);
-        utilisateur.setLocalisation(localisation);
-
-        // Process photo if provided
-        if (photoFile != null && !photoFile.isEmpty()) {
+        // Mettre à jour les informations utilisateur
+        user.setNom(nom);
+        user.setTelephone(telephone);
+        user.setLocalisation(localisation);
+        
+        // Traiter l'image si elle est fournie
+        if (profileImage != null && !profileImage.isEmpty()) {
             try {
-                // Check file size (max 2MB)
-                if (photoFile.getSize() > 2 * 1024 * 1024) {
+                // Vérifier la taille de l'image (max 2MB)
+                if (profileImage.getSize() > 2 * 1024 * 1024) {
                     redirectAttributes.addFlashAttribute("profileError", "photo-invalid");
-                    redirectAttributes.addFlashAttribute("profileErrorMessage", "La taille de la photo ne doit pas dépasser 2MB.");
-                    return "redirect:/user/dashboard?profileError=true";
+                    return "redirect:/user/dashboard";
                 }
-
-                // Check file type
-                String contentType = photoFile.getContentType();
+                
+                // Vérifier le type de fichier
+                String contentType = profileImage.getContentType();
                 if (contentType == null || (!contentType.equals("image/jpeg") && !contentType.equals("image/png"))) {
                     redirectAttributes.addFlashAttribute("profileError", "photo-invalid");
-                    redirectAttributes.addFlashAttribute("profileErrorMessage", "Le format de la photo doit être JPG ou PNG.");
-                    return "redirect:/user/dashboard?profileError=true";
+                    return "redirect:/user/dashboard";
                 }
-
-                byte[] bytes = photoFile.getBytes();
+                
+                // Convertir l'image en Base64
+                byte[] bytes = profileImage.getBytes();
                 String base64Image = Base64.getEncoder().encodeToString(bytes);
-                utilisateur.setLogoPath(base64Image);
+                user.setLogoPath(base64Image);
             } catch (IOException e) {
                 redirectAttributes.addFlashAttribute("profileError", "photo-invalid");
-                redirectAttributes.addFlashAttribute("profileErrorMessage", "Erreur lors du téléchargement de la photo.");
-                return "redirect:/user/dashboard?profileError=true";
+                return "redirect:/user/dashboard";
             }
         }
-
-        utilisateursRepository.save(utilisateur);
-        redirectAttributes.addFlashAttribute("success", "Profil mis à jour avec succès.");
+        
+        // Sauvegarder les modifications
+        utilisateursRepository.save(user);
+        
+        // Message de succès
+        redirectAttributes.addFlashAttribute("successMessage", "Profil mis à jour avec succès");
         return "redirect:/user/dashboard";
     }
 
